@@ -430,7 +430,7 @@ class _FollowCardState extends State<_FollowCard> {
           ),
           const SizedBox(height: 2),
           Text(
-            '@$username',
+            '$username',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 11, color: Colors.grey),
