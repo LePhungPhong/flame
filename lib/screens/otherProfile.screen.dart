@@ -103,14 +103,14 @@ class AvatarCircle extends StatelessWidget {
 
 class OtherProfileScreen extends StatefulWidget {
   final String userId;
-  final String username; // <--- THÊM username để lấy Follow
+  final String username; // username để gọi API follow
   final String displayName;
   final String? avatarUrl;
 
   const OtherProfileScreen({
     super.key,
     required this.userId,
-    required this.username, // <--- THÊM
+    required this.username,
     required this.displayName,
     this.avatarUrl,
   });
@@ -122,6 +122,10 @@ class OtherProfileScreen extends StatefulWidget {
 class _OtherProfileScreenState extends State<OtherProfileScreen> {
   bool _isInitLoading = false;
   String? _currentUserId;
+
+  // follow state
+  bool _isFollowingUser = false; // mình có đang follow người này không
+  bool _isTogglingFollow = false; // loading khi bấm nút follow
 
   // Posts
   List<PostModel> _posts = [];
@@ -240,24 +244,36 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
         "[🐛 PROFILE DEBUG] Fetching Follow Counts for ${widget.username}...",
       );
 
-      // API Friend dùng USERNAME
+      // API Friend dùng USERNAME để lấy follower/following của người này
       final followers = await FriendServiceApi.getFollowers(
-        username: widget.username, // <--- Dùng username
+        username: widget.username,
         onlyMe: false,
       );
       final following = await FriendServiceApi.getFollowing(
-        username: widget.username, // <--- Dùng username
+        username: widget.username,
         onlyMe: false,
       );
 
+      // kiểm tra xem current user có nằm trong danh sách followers không
+      bool isFollowing = false;
+      if (_currentUserId != null) {
+        for (final u in followers) {
+          if (u.id == _currentUserId) {
+            isFollowing = true;
+            break;
+          }
+        }
+      }
+
       debugPrint(
-        '[OtherProfile] Stats Loaded -> Followers: ${followers.length}, Following: ${following.length}',
+        '[OtherProfile] Stats Loaded -> Followers: ${followers.length}, Following: ${following.length}, isFollowing=$isFollowing',
       );
 
       if (!mounted) return;
       setState(() {
         _followersCount = followers.length;
         _followingCount = following.length;
+        _isFollowingUser = isFollowing;
       });
     } catch (e) {
       if (!mounted) return;
@@ -271,9 +287,54 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
     }
   }
 
+  /// Bật/tắt Follow với tài khoản này
+  Future<void> _toggleFollow() async {
+    // nếu đang xử lý hoặc đang xem chính mình thì bỏ
+    if (_isTogglingFollow ||
+        _currentUserId == null ||
+        _currentUserId == widget.userId) {
+      return;
+    }
+
+    setState(() {
+      _isTogglingFollow = true;
+    });
+
+    try {
+      final msg = await FriendServiceApi.addOrUnFollowById(widget.userId);
+
+      if (!mounted) return;
+
+      setState(() {
+        final willFollow = !_isFollowingUser;
+        _isFollowingUser = willFollow;
+
+        // cập nhật số người theo dõi hiển thị
+        if (willFollow) {
+          _followersCount = (_followersCount + 1).clamp(0, 1 << 31);
+        } else {
+          _followersCount = (_followersCount - 1).clamp(0, 1 << 31);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isTogglingFollow = false;
+        });
+      }
+    }
+  }
+
   Future<List<FollowUser>> _fetchFollowers() async {
     final list = await FriendServiceApi.getFollowers(
-      username: widget.username, // <--- Dùng username
+      username: widget.username,
       onlyMe: false,
     );
     return list
@@ -291,7 +352,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
 
   Future<List<FollowUser>> _fetchFollowing() async {
     final list = await FriendServiceApi.getFollowing(
-      username: widget.username, // <--- Dùng username
+      username: widget.username,
       onlyMe: false,
     );
     return list
@@ -315,7 +376,10 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
-        return _FollowListSheet(title: 'Followers', loader: _fetchFollowers);
+        return _FollowListSheet(
+          title: 'Người theo dõi',
+          loader: _fetchFollowers,
+        );
       },
     );
   }
@@ -328,7 +392,10 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
-        return _FollowListSheet(title: 'Following', loader: _fetchFollowing);
+        return _FollowListSheet(
+          title: 'Đang theo dõi',
+          loader: _fetchFollowing,
+        );
       },
     );
   }
@@ -354,6 +421,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AvatarCircle(
             imageUrl: avatarUrl,
@@ -362,27 +430,35 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
                 ? displayName[0].toUpperCase()
                 : '?',
           ),
-          const SizedBox(width: 24),
+          const SizedBox(width: 16),
           Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem(
-                  label: 'Posts',
-                  value: postCount,
-                  onTap: () => setState(() => _viewMode = 0),
-                ),
-                _buildStatItem(
-                  label: 'Followers',
-                  value: _followersCount,
-                  onTap: _openFollowersBottomSheet,
-                ),
-                _buildStatItem(
-                  label: 'Following',
-                  value: _followingCount,
-                  onTap: _openFollowingBottomSheet,
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4), // chừa biên phải 1 chút
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildStatItem(
+                      label: 'Bài viết',
+                      value: postCount,
+                      onTap: () => setState(() => _viewMode = 0),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildStatItem(
+                      label: 'Người theo dõi',
+                      value: _followersCount,
+                      onTap: _openFollowersBottomSheet,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildStatItem(
+                      label: 'Đang theo dõi',
+                      value: _followingCount,
+                      onTap: _openFollowingBottomSheet,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -396,13 +472,20 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
     VoidCallback? onTap,
   }) {
     final content = Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           value.toString(),
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+        ),
       ],
     );
     if (onTap == null) return content;
@@ -410,43 +493,48 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: content,
       ),
     );
   }
 
+  /// Nút Follow duy nhất (bỏ nút nhắn tin)
   Widget _buildActionButtons() {
+    final bool isSelf = _currentUserId == widget.userId;
+
+    // Nếu xem trang cá nhân của chính mình thì không hiện nút follow
+    if (isSelf) {
+      return const SizedBox.shrink();
+    }
+
+    final String buttonText = _isFollowingUser ? 'Bỏ theo dõi' : 'Theo dõi';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Tính năng Follow đang phát triển'),
-                  ),
-                );
-              },
-              child: const Text('Follow'),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: _isTogglingFollow ? null : _toggleFollow,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _isFollowingUser
+                ? Colors.grey.shade800
+                : Colors.black,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(999),
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Tính năng Message đang phát triển'),
+          child: _isTogglingFollow
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
-                );
-              },
-              child: const Text('Message'),
-            ),
-          ),
-        ],
+                )
+              : Text(buttonText),
+        ),
       ),
     );
   }
@@ -463,6 +551,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
           ),
           style: IconButton.styleFrom(
             backgroundColor: _viewMode == 0 ? Colors.black : Colors.transparent,
+            shape: const CircleBorder(),
           ),
           onPressed: () => setState(() => _viewMode = 0),
         ),
@@ -474,10 +563,71 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
           ),
           style: IconButton.styleFrom(
             backgroundColor: _viewMode == 1 ? Colors.black : Colors.transparent,
+            shape: const CircleBorder(),
           ),
           onPressed: () => setState(() => _viewMode = 1),
         ),
       ],
+    );
+  }
+
+  // Ảnh trong grid bài viết: hỗ trợ cả AVIF & jpg/png
+  Widget _buildPostGridImage(String mediaUrl) {
+    final placeholder = Container(
+      color: Colors.grey.shade300,
+      child: const Icon(
+        Icons.image_not_supported_outlined,
+        color: Colors.black54,
+      ),
+    );
+
+    if (mediaUrl.isEmpty) return placeholder;
+
+    final isAvif = mediaUrl.toLowerCase().endsWith('.avif');
+
+    if (isAvif) {
+      return AvifImage.network(
+        mediaUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => placeholder,
+      );
+    }
+
+    return Image.network(
+      mediaUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => placeholder,
+    );
+  }
+
+  /// Popup xem chi tiết 1 bài viết khi bấm vào ô trong grid
+  void _openPostPopup(PostModel post) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(8),
+          backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: PostCard(
+                post: post,
+                currentUserId: _currentUserId,
+                onChanged: () async {
+                  await _loadUserPostsInitial();
+                  if (ctx.mounted) {
+                    Navigator.of(ctx).pop();
+                  }
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -537,22 +687,12 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
               final String mediaUrl = buildFullUrl(post.media.first.url);
 
               return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _viewMode = 1;
-                  });
-                },
+                onTap: () => _openPostPopup(post),
                 child: Container(
                   color: Colors.grey.shade200,
                   child: Stack(
                     children: [
-                      Positioned.fill(
-                        child: Image.network(
-                          mediaUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.error),
-                        ),
-                      ),
+                      Positioned.fill(child: _buildPostGridImage(mediaUrl)),
                       if (title.isNotEmpty)
                         Align(
                           alignment: Alignment.bottomCenter,
@@ -644,7 +784,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
       appBar: AppBar(
         title: Text(
           widget.displayName.trim().isEmpty
-              ? 'Profile'
+              ? 'Trang cá nhân'
               : widget.displayName.trim(),
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
@@ -760,6 +900,20 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                       final avatarUrl = buildFullUrl(u.avatarUrl);
 
                       return ListTile(
+                        onTap: () {
+                          final navigator = Navigator.of(context);
+                          navigator.pop(); // đóng sheet
+                          navigator.push(
+                            MaterialPageRoute(
+                              builder: (_) => OtherProfileScreen(
+                                userId: u.id,
+                                username: u.username,
+                                displayName: u.displayName,
+                                avatarUrl: u.avatarUrl,
+                              ),
+                            ),
+                          );
+                        },
                         leading: AvatarCircle(
                           imageUrl: avatarUrl,
                           radius: 20,
@@ -772,7 +926,7 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                         subtitle: Text(
-                          '${u.username}',
+                          u.username,
                           style: const TextStyle(fontSize: 12),
                         ),
                         trailing: u.isMutual
@@ -786,7 +940,7 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
-                                  'Mutual',
+                                  'Bạn bè',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.blue.shade600,

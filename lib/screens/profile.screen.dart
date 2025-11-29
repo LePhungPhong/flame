@@ -14,6 +14,7 @@ import '../models/post.model.dart';
 
 import '../widgets/postCard.dart';
 import 'login.screen.dart';
+import 'otherProfile.screen.dart';
 
 /// Base URL domain; path BE trả về sẽ được ghép thêm vào
 const String kBaseUploadUrl = 'https://flame.id.vn';
@@ -844,6 +845,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return baseImage;
   }
 
+  /// Popup xem chi tiết 1 bài viết khi bấm vào ô trong grid
+  void _openPostPopup(PostModel post) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(8),
+          backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: PostCard(
+                post: post,
+                currentUserId: _currentUserId,
+                onChanged: () async {
+                  // reload lại list bài viết sau khi sửa / xoá / like...
+                  await _loadUserPostsInitial();
+                  if (ctx.mounted) {
+                    Navigator.of(ctx).pop(); // đóng popup
+                  }
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   /// Phần bài viết
   Widget _buildPostsSection(UserProfile p) {
     if (_isLoadingPosts) {
@@ -903,12 +936,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               final MediaItem firstMedia = post.media.first;
 
               return GestureDetector(
-                onTap: () {
-                  // Chuyển sang mode list để xem chi tiết
-                  setState(() {
-                    _viewMode = 1;
-                  });
-                },
+                onTap: () => _openPostPopup(post),
                 child: Container(
                   color: Colors.grey.shade200,
                   child: Stack(
@@ -1064,8 +1092,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 /// Bottom sheet hiển thị danh sách followers / following
+/// Bottom sheet hiển thị danh sách followers / following
 class _FollowListSheet extends StatefulWidget {
-  final String title;
+  final String title; // "Followers" hoặc "Following"
   final Future<List<FollowUser>> Function() loader;
 
   const _FollowListSheet({required this.title, required this.loader});
@@ -1077,10 +1106,62 @@ class _FollowListSheet extends StatefulWidget {
 class _FollowListSheetState extends State<_FollowListSheet> {
   late Future<List<FollowUser>> _future;
 
+  // lưu danh sách để có thể remove khi unfollow
+  List<FollowUser>? _items;
+
+  // trạng thái mình đang follow user đó hay không
+  final Map<String, bool> _followState = {};
+
+  // id đang loading (nhấn nút follow/unfollow)
+  final Set<String> _loadingIds = {};
+
   @override
   void initState() {
     super.initState();
     _future = widget.loader();
+  }
+
+  bool get _isFollowersSheet => widget.title == 'Followers';
+  bool get _isFollowingSheet => widget.title == 'Following';
+
+  Future<void> _onToggleFollow(String userId) async {
+    if (_loadingIds.contains(userId)) return;
+
+    setState(() {
+      _loadingIds.add(userId);
+    });
+
+    try {
+      final msg = await FriendServiceApi.addOrUnFollowById(userId);
+
+      if (!mounted) return;
+
+      final current =
+          _followState[userId] ?? (_isFollowingSheet ? true : false);
+      final newVal = !current;
+
+      setState(() {
+        _followState[userId] = newVal;
+
+        // Nếu đang ở tab "Đang theo dõi" và bấm unfollow -> xoá khỏi list
+        if (_isFollowingSheet && !newVal) {
+          _items?.removeWhere((e) => e.id == userId);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingIds.remove(userId);
+        });
+      }
+    }
   }
 
   @override
@@ -1125,12 +1206,30 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                     );
                   }
 
-                  final items = snapshot.data ?? [];
+                  final fetched = snapshot.data ?? [];
+
+                  // Khởi tạo _items & _followState lần đầu
+                  if (_items == null) {
+                    _items = List<FollowUser>.from(fetched);
+                    for (final u in _items!) {
+                      bool isFollowing;
+                      if (_isFollowersSheet) {
+                        // nếu mutual thì mình đã follow họ
+                        isFollowing = u.isMutual;
+                      } else {
+                        // tab Following: chắc chắn mình đang follow họ
+                        isFollowing = true;
+                      }
+                      _followState[u.id] = isFollowing;
+                    }
+                  }
+
+                  final items = _items ?? [];
 
                   if (items.isEmpty) {
                     return Center(
                       child: Text(
-                        widget.title == 'Followers'
+                        _isFollowersSheet
                             ? 'Chưa có ai follow bạn.'
                             : 'Bạn chưa follow ai.',
                         style: const TextStyle(color: Colors.grey),
@@ -1144,8 +1243,51 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                     itemBuilder: (context, index) {
                       final u = items[index];
                       final avatarUrl = buildFullUrl(u.avatarUrl);
+                      final isFollowing =
+                          _followState[u.id] ??
+                          (_isFollowingSheet ? true : false);
+                      final isLoading = _loadingIds.contains(u.id);
+
+                      Widget? trailing;
+
+                      if (u.isMutual && isFollowing) {
+                        // Hai bên follow nhau
+                        trailing = const _FriendChip();
+                      } else {
+                        // Không phải bạn bè: hiện Follow / Bỏ theo dõi
+                        if (_isFollowersSheet) {
+                          // Họ follow mình, mình chưa follow lại
+                          trailing = _FollowActionButton(
+                            text: isFollowing ? 'Bỏ theo dõi' : 'Theo dõi',
+                            loading: isLoading,
+                            onPressed: () => _onToggleFollow(u.id),
+                          );
+                        } else {
+                          // Tab Following: mình đang theo dõi họ
+                          trailing = _FollowActionButton(
+                            text: isFollowing ? 'Bỏ theo dõi' : 'Theo dõi',
+                            loading: isLoading,
+                            onPressed: () => _onToggleFollow(u.id),
+                          );
+                        }
+                      }
 
                       return ListTile(
+                        onTap: () {
+                          // đóng bottom sheet rồi push sang trang cá nhân
+                          final navigator = Navigator.of(context);
+                          navigator.pop();
+                          navigator.push(
+                            MaterialPageRoute(
+                              builder: (_) => OtherProfileScreen(
+                                userId: u.id,
+                                username: u.username,
+                                displayName: u.displayName,
+                                avatarUrl: u.avatarUrl,
+                              ),
+                            ),
+                          );
+                        },
                         leading: AvatarCircle(
                           imageUrl: avatarUrl,
                           radius: 20,
@@ -1161,25 +1303,7 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                           '${u.username}',
                           style: const TextStyle(fontSize: 12),
                         ),
-                        trailing: u.isMutual
-                            ? Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  'Bạn bè',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.blue.shade600,
-                                  ),
-                                ),
-                              )
-                            : null,
+                        trailing: trailing,
                       );
                     },
                   );
@@ -1189,6 +1313,65 @@ class _FollowListSheetState extends State<_FollowListSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Chip "Bạn bè" (mutual)
+class _FriendChip extends StatelessWidget {
+  const _FriendChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        'Bạn bè',
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.blue.shade600,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+/// Nút Follow / Bỏ theo dõi
+class _FollowActionButton extends StatelessWidget {
+  final String text;
+  final bool loading;
+  final VoidCallback onPressed;
+
+  const _FollowActionButton({
+    required this.text,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: loading ? null : onPressed,
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        side: BorderSide(color: Colors.blue.shade400),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      ),
+      child: loading
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Text(
+              text,
+              style: TextStyle(fontSize: 11, color: Colors.blue.shade600),
+            ),
     );
   }
 }

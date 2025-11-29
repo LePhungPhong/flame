@@ -110,6 +110,31 @@ class FriendServiceApi {
     };
   }
 
+  static Future<String> addOrUnFollowById(String userId) async {
+    final uri = Uri.parse("$_baseUrl/follows");
+    final body = jsonEncode({"followerId": userId});
+
+    debugPrint("[👥 FRIEND API] POST $uri, body=$body");
+
+    final res = await http.post(uri, headers: await _headers(), body: body);
+
+    Map<String, dynamic> jsonBody = {};
+    try {
+      jsonBody = jsonDecode(res.body) as Map<String, dynamic>;
+    } catch (_) {}
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      final msg = (jsonBody['message'] ?? 'Thao tác follow thất bại')
+          .toString();
+      debugPrint("[❌ FRIEND API] $msg");
+      throw Exception(msg);
+    }
+
+    final msg = (jsonBody['message'] ?? 'Thành công').toString();
+    debugPrint("[✅ FRIEND API] $msg");
+    return msg;
+  }
+
   // --- SỬA CHÍNH: Nhận `username` thay vì `userId` ---
   static Future<FriendSuggestionsResult> getFriendSuggestions({
     String? username,

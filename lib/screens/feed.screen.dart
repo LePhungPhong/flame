@@ -1,9 +1,9 @@
+// lib/screens/feed.screen.dart
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Import
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flame/models/post.model.dart';
 import 'package:flame/widgets/postCard.dart';
-import 'package:flame/screens/createPost.screen.dart';
 import 'package:flame/services/searchService/search.service.dart';
 
 class FeedScreen extends StatefulWidget {
@@ -22,13 +22,13 @@ class _FeedScreenState extends State<FeedScreen> {
   bool _hasMore = true;
   int _currentPage = 1;
 
-  // [BIẾN QUAN TRỌNG] Lưu ID người đang đăng nhập
+  // Lưu ID người đang đăng nhập
   String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
-    _loadCurrentUser(); // Lấy ID ngay khi màn hình mở
+    _loadCurrentUser();
     _loadInitial();
 
     _scrollController.addListener(() {
@@ -42,11 +42,9 @@ class _FeedScreenState extends State<FeedScreen> {
     });
   }
 
-  // Hàm lấy ID từ SharedPreferences (đã được AuthService lưu)
   Future<void> _loadCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      // 'user_id' phải khớp với key trong AuthService
       _currentUserId = prefs.getString("user_id");
     });
   }
@@ -114,16 +112,6 @@ class _FeedScreenState extends State<FeedScreen> {
     await _loadInitial();
   }
 
-  Future<void> _openCreatePost() async {
-    final created = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const CreatePostScreen()));
-
-    if (created == true) {
-      await _loadInitial();
-    }
-  }
-
   void _onPostChanged() {
     _loadInitial();
   }
@@ -161,7 +149,6 @@ class _FeedScreenState extends State<FeedScreen> {
                   }
 
                   final post = _posts[index];
-                  // [QUAN TRỌNG] Truyền currentUserId xuống PostCard
                   return PostCard(
                     post: post,
                     currentUserId: _currentUserId,
@@ -169,11 +156,6 @@ class _FeedScreenState extends State<FeedScreen> {
                   );
                 },
               ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openCreatePost,
-        icon: const Icon(Icons.add),
-        label: const Text("Đăng bài"),
       ),
     );
   }
