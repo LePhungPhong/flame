@@ -312,14 +312,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ================= FOLLOW STATS =================
-
   Future<void> _refreshFollowStats() async {
     final p = _profile;
     if (p == null) return;
 
     try {
-      final followers = await FriendServiceApi.getFollowers(userId: p.id);
-      final following = await FriendServiceApi.getFollowing(userId: p.id);
+      // Vì là Profile của mình, gọi onlyMe: true
+      final followers = await FriendServiceApi.getFollowers(onlyMe: true);
+      final following = await FriendServiceApi.getFollowing(onlyMe: true);
 
       if (!mounted) return;
 
@@ -327,15 +327,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _followersCountOverride = followers.length;
         _followingCountOverride = following.length;
       });
-
-      debugPrint(
-        '[Profile] followers=${followers.length}, following=${following.length}',
-      );
     } catch (e) {
       debugPrint('[Profile] refresh follow stats error: $e');
     }
   }
-
   // ================= SAVE PROFILE =================
 
   Future<bool> _saveProfile() async {
@@ -546,13 +541,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ================= FOLLOWERS / FOLLOWING POPUP =================
 
   Future<List<FollowUser>> _fetchFollowers(String userId) async {
-    final list = await FriendServiceApi.getFollowers(userId: userId);
+    // Không dùng userId nữa, dùng onlyMe: true
+    final list = await FriendServiceApi.getFollowers(onlyMe: true);
 
-    if (mounted) {
-      setState(() {
-        _followersCountOverride = list.length;
-      });
-    }
+    if (mounted) setState(() => _followersCountOverride = list.length);
 
     return list
         .map(
@@ -568,13 +560,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<List<FollowUser>> _fetchFollowing(String userId) async {
-    final list = await FriendServiceApi.getFollowing(userId: userId);
+    final list = await FriendServiceApi.getFollowing(onlyMe: true);
 
-    if (mounted) {
-      setState(() {
-        _followingCountOverride = list.length;
-      });
-    }
+    if (mounted) setState(() => _followingCountOverride = list.length);
 
     return list
         .map(

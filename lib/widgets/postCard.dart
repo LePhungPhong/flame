@@ -6,7 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import 'package:flame/models/post.model.dart';
 import 'package:flame/services/postService/post.service.dart';
-import 'package:flame/screens/editPost.screen.dart'; // 👈 THÊM IMPORT NÀY
+import 'package:flame/screens/editPost.screen.dart';
 import 'package:flame/screens/otherProfile.screen.dart';
 
 /// Base URL domain; path BE trả về sẽ được ghép thêm vào
@@ -174,24 +174,20 @@ class _PostCardState extends State<PostCard> {
   void _openAuthorProfile() {
     final p = widget.post;
 
-    // Nếu là bài của chính mình thì thôi (đã có tab Profile riêng)
     if (widget.currentUserId != null && widget.currentUserId == p.authorId) {
       return;
     }
 
-    // Nếu thiếu authorId thì không điều hướng
     if (p.authorId.isEmpty) return;
 
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => OtherProfileScreen(
           userId: p.authorId,
-          username: p
-              .authorName, // ở BE bạn đang để author_fullname + username, tuỳ bạn chỉnh
-          fullname: p.authorName,
+          // Truyền authorName làm username (hoặc lấy từ model nếu có field username riêng)
+          username: p.authorUsername,
+          displayName: p.authorName,
           avatarUrl: p.authorAvatar,
-          // tạm thời không truyền posts, chỉ show hồ sơ
-          posts: const [],
         ),
       ),
     );
@@ -297,9 +293,8 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
-  /// 👇 ĐÃ THÊM LẠI: mở màn chỉnh sửa bài viết
+  /// Mở màn chỉnh sửa bài viết
   Future<void> _editPost() async {
-    // EditPostScreen nên trả về true nếu có thay đổi, false/null nếu không
     final bool? updated = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => EditPostScreen(post: widget.post)),
     );
@@ -307,7 +302,6 @@ class _PostCardState extends State<PostCard> {
     if (!mounted) return;
 
     if (updated == true) {
-      // Sau khi chỉnh sửa xong: reload lại tương tác + báo cho parent reload list
       await _loadInteractions();
       widget.onChanged?.call();
     }
@@ -494,7 +488,7 @@ class _PostCardState extends State<PostCard> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 👇 Bọc avatar + tên trong InkWell để bấm được
+                // Avatar + tên bấm để vào trang profile người khác
                 Expanded(
                   child: InkWell(
                     onTap: _openAuthorProfile,

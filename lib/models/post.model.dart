@@ -28,6 +28,7 @@ class PostModel {
   final String id;
   final String authorId;
   final String authorName;
+  final String authorUsername;
   final String? authorAvatar;
   final String? title;
   final String? content;
@@ -42,6 +43,7 @@ class PostModel {
     required this.id,
     required this.authorId,
     required this.authorName,
+    required this.authorUsername,
     this.authorAvatar,
     this.title,
     this.content,
@@ -75,8 +77,8 @@ class PostModel {
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
     final user = json['user'] as Map<String, dynamic>?;
-
-    // ==== GOM AVATAR AUTHOR (giống profile) ====
+    final String parsedUsername = json['author_username'] ?? '';
+    // ==== AVATAR AUTHOR ====
     String? authorAvatar;
     for (final c in [
       json['author_avatar'],
@@ -95,7 +97,7 @@ class PostModel {
       }
     }
 
-    // ==== GOM TOÀN BỘ MEDIA: mediaUrls + media + media_urls + images/videos/files ====
+    // ==== GOM MEDIA ====
     final List<dynamic> mediaRaw = [];
     mediaRaw
       ..addAll(_asList(json['mediaUrls']))
@@ -109,13 +111,17 @@ class PostModel {
       '[PostModel.fromJson] id=${json['id']} mediaRawLength=${mediaRaw.length}',
     );
 
+    // 🔥 QUAN TRỌNG: ƯU TIÊN author_id / authorId TRƯỚC, rồi mới fallback userId
+    final String authorId =
+        json['author_id']?.toString() ??
+        json['authorId']?.toString() ??
+        json['userId']?.toString() ??
+        json['user_id']?.toString() ??
+        '';
+
     return PostModel(
       id: json['id']?.toString() ?? '',
-      authorId:
-          json['userId']?.toString() ??
-          json['user_id']?.toString() ??
-          json['author_id']?.toString() ??
-          '',
+      authorId: authorId,
       authorName:
           json['author_fullname'] ??
           json['author_username'] ??
@@ -124,6 +130,7 @@ class PostModel {
           user?['fullname'] ??
           user?['name'] ??
           'Người dùng',
+      authorUsername: parsedUsername,
       authorAvatar: authorAvatar,
       title: json['title']?.toString(),
       content: json['content']?.toString(),

@@ -36,7 +36,7 @@ class FeedService {
     return [];
   }
 
-  /// Lấy danh sách bài viết hot (giống web: /search/hot)
+  /// Lấy danh sách bài viết hot
   static Future<List<PostModel>> getHotPosts({required int page}) async {
     final start = (page - 1) * pageSize;
 
@@ -53,18 +53,23 @@ class FeedService {
     return _parsePostList(items);
   }
 
-  /// Lấy bài viết của 1 user cụ thể (giống logic web searchPost: userId + onlyMe)
+  /// SỬA: Thêm tham số `onlyMe` (mặc định true để giữ tương thích code cũ)
+  /// Nếu xem profile người khác -> truyền onlyMe: false
   static Future<List<PostModel>> getUserPosts({
     required String userId,
     int page = 1,
     int limit = pageSize,
+    bool onlyMe = true, // <--- SỬA TẠI ĐÂY
   }) async {
     final start = (page - 1) * limit;
+
+    // Convert bool sang int (1 hoặc 0)
+    final int onlyMeVal = onlyMe ? 1 : 0;
 
     final uri = Uri.parse(
       "$_baseUrl/search/posts"
       "?userId=$userId"
-      "&onlyMe=1"
+      "&onlyMe=$onlyMeVal" // <--- Dùng biến dynamic
       "&start=$start"
       "&limit=$limit",
     );
