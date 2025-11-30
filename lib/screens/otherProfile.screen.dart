@@ -156,9 +156,6 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       _currentUserId = prefs.getString("user_id");
-      debugPrint(
-        "[🐛 PROFILE DEBUG] Viewing profile of: ${widget.userId} (${widget.username})",
-      );
 
       await Future.wait([_loadUserPostsInitial(), _loadFollowCounts()]);
     } finally {
@@ -192,7 +189,6 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      debugPrint("Lỗi load posts: $e");
     } finally {
       if (mounted) {
         setState(() {

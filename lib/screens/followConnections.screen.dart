@@ -23,9 +23,6 @@ String buildFullUrl(String? url) {
   }
 
   final full = '$kBaseUploadUrl$u';
-  if (kDebugMode) {
-    debugPrint('[FollowConnections] buildFullUrl: $url -> $full');
-  }
   return full;
 }
 
@@ -532,7 +529,6 @@ class _FollowAvatarCircle extends StatelessWidget {
             height: size,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              debugPrint('[FollowAvatarCircle] AVIF load error: $error');
               return buildFallback();
             },
           )
@@ -542,7 +538,6 @@ class _FollowAvatarCircle extends StatelessWidget {
             height: size,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              debugPrint('[FollowAvatarCircle] Image load error: $error');
               return buildFallback();
             },
           );

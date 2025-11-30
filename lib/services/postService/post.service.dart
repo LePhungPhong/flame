@@ -4,6 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flame/config.dart';
 import 'package:flame/models/post.model.dart';
+import 'dart:io';
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
 
 class PostService {
   static String get _baseUrl => AppConfig.postBaseUrl;
@@ -260,6 +263,49 @@ class PostService {
     } else {
       // Xử lý các lỗi khác (404, 500...)
       throw Exception("Lỗi tải bài viết: ${res.statusCode} - ${res.body}");
+    }
+  }
+
+  // ================= UPLOAD ẢNH =================
+  /// Upload 1 file ảnh và trả về URL (string) do server trả về
+  static Future<String> uploadImage(File file) async {
+    // ❗ ĐỔI PATH NÀY CHO ĐÚNG VỚI ROUTE NEXT.JS
+    // Nếu file route ở: app/api/upload/route.ts  → "/upload"
+    // Nếu ở: app/api/v1/upload/route.ts          → dùng _uri("/upload")
+    final uri = _uri("/api/upload-local");
+
+    final token = await _getToken();
+
+    final request = http.MultipartRequest("POST", uri);
+
+    if (token != null) {
+      request.headers["Authorization"] = "Bearer $token";
+    }
+
+    // Lấy mime type từ extension (vd: image/jpeg, image/png)
+    final mimeType = lookupMimeType(file.path) ?? "image/jpeg";
+    final parts = mimeType.split("/");
+
+    final multipartFile = await http.MultipartFile.fromPath(
+      "file", // 👈 PHẢI ĐÚNG TÊN "file" như backend form.get("file")
+      file.path,
+      contentType: MediaType(parts[0], parts[1]),
+    );
+
+    request.files.add(multipartFile);
+
+    final streamedRes = await request.send();
+    final res = await http.Response.fromStream(streamedRes);
+
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final data = jsonDecode(res.body);
+      final url = data["url"]?.toString();
+      if (url == null || url.isEmpty) {
+        throw Exception("Server không trả về url file");
+      }
+      return url;
+    } else {
+      throw Exception("Upload thất bại: ${res.statusCode} - ${res.body}");
     }
   }
 }

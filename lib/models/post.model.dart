@@ -18,8 +18,6 @@ class MediaItem {
 
     final url = rawUrl.toString();
     final type = rawType.toString();
-
-    debugPrint('[MediaItem.fromJson] json=$json -> url="$url", type="$type"');
     return MediaItem(url: url, type: type);
   }
 }
@@ -106,10 +104,6 @@ class PostModel {
       ..addAll(_asList(json['images']))
       ..addAll(_asList(json['videos']))
       ..addAll(_asList(json['files']));
-
-    debugPrint(
-      '[PostModel.fromJson] id=${json['id']} mediaRawLength=${mediaRaw.length}',
-    );
 
     // 🔥 QUAN TRỌNG: ƯU TIÊN author_id / authorId TRƯỚC, rồi mới fallback userId
     final String authorId =
@@ -215,10 +209,6 @@ class CommentModel {
         json['createdAt'] ??
         json['created_at_time'] ??
         '';
-
-    debugPrint(
-      '[CommentModel.fromJson] id=${json['id']} avatar="$pickedAvatar" user=$user',
-    );
 
     return CommentModel(
       id: json['id']?.toString() ?? '',
