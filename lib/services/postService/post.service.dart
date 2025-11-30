@@ -7,6 +7,7 @@ import 'package:flame/models/post.model.dart';
 import 'dart:io';
 import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart';
+import 'package:flame/config.dart';
 
 class PostService {
   static String get _baseUrl => AppConfig.postBaseUrl;
@@ -269,12 +270,13 @@ class PostService {
   // ================= UPLOAD ẢNH =================
   /// Upload 1 file ảnh và trả về URL (string) do server trả về
   static Future<String> uploadImage(File file) async {
-    // ❗ ĐỔI PATH NÀY CHO ĐÚNG VỚI ROUTE NEXT.JS
-    // Nếu file route ở: app/api/upload/route.ts  → "/upload"
-    // Nếu ở: app/api/v1/upload/route.ts          → dùng _uri("/upload")
-    final uri = _uri("/api/upload-local");
+    final uri = Uri.parse('${AppConfig.postBaseUrl}/api/upload-local');
 
-    final token = await _getToken();
+    // Nếu bạn có token thì lấy, không thì có thể bỏ đoạn này
+    String? token;
+    try {
+      token = await _getToken(); // nếu không có hàm này thì bỏ phần header auth
+    } catch (_) {}
 
     final request = http.MultipartRequest("POST", uri);
 
@@ -282,12 +284,12 @@ class PostService {
       request.headers["Authorization"] = "Bearer $token";
     }
 
-    // Lấy mime type từ extension (vd: image/jpeg, image/png)
+    // Lấy mime type (image/jpeg, image/png, …)
     final mimeType = lookupMimeType(file.path) ?? "image/jpeg";
     final parts = mimeType.split("/");
 
     final multipartFile = await http.MultipartFile.fromPath(
-      "file", // 👈 PHẢI ĐÚNG TÊN "file" như backend form.get("file")
+      "file", // 👈 phải trùng với formData.append("file", ...) trên web
       file.path,
       contentType: MediaType(parts[0], parts[1]),
     );

@@ -37,6 +37,9 @@ class PostModel {
   final DateTime createdAt;
   final List<MediaItem> media;
 
+  /// ✅ Danh sách hashtag của bài viết
+  final List<String> hashtags;
+
   PostModel({
     required this.id,
     required this.authorId,
@@ -51,6 +54,7 @@ class PostModel {
     required this.shareCount,
     required this.createdAt,
     required this.media,
+    this.hashtags = const [],
   });
 
   static int _toInt(dynamic v, {int defaultValue = 0}) {
@@ -73,9 +77,18 @@ class PostModel {
     return const [];
   }
 
+  /// Helper: parse list string (hashtags)
+  static List<String> _parseStringList(dynamic v) {
+    return _asList(v)
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty && s != 'null')
+        .toList();
+  }
+
   factory PostModel.fromJson(Map<String, dynamic> json) {
     final user = json['user'] as Map<String, dynamic>?;
     final String parsedUsername = json['author_username'] ?? '';
+
     // ==== AVATAR AUTHOR ====
     String? authorAvatar;
     for (final c in [
@@ -113,6 +126,13 @@ class PostModel {
         json['user_id']?.toString() ??
         '';
 
+    // ✅ PARSE HASHTAGS
+    final List<String> tags =
+        _parseStringList(
+          json['hashtags'] ?? json['hash_tags'] ?? json['tags'],
+        ) ??
+        const <String>[];
+
     return PostModel(
       id: json['id']?.toString() ?? '',
       authorId: authorId,
@@ -149,6 +169,7 @@ class PostModel {
           .whereType<Map<String, dynamic>>()
           .map((m) => MediaItem.fromJson(m))
           .toList(),
+      hashtags: tags,
     );
   }
 }
@@ -196,6 +217,7 @@ class CommentModel {
       user?['avatar_url'],
       user?['profileImage'],
       user?['profile_image'],
+      user?['author_avatar'],
     ]) {
       final s = _clean(c);
       if (s != null) {

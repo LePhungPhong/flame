@@ -154,6 +154,10 @@ class _PostCardState extends State<PostCard> {
   Future<void>? _videoInitFuture;
   String? _currentVideoUrl;
 
+  // ==== MEDIA CAROUSEL STATE ====
+  late PageController _mediaPageController;
+  int _currentMediaIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -162,12 +166,15 @@ class _PostCardState extends State<PostCard> {
     commentCount = widget.post.commentCount;
     shareCount = widget.post.shareCount;
 
+    _mediaPageController = PageController();
+
     _loadInteractions();
   }
 
   @override
   void dispose() {
     _videoController?.dispose();
+    _mediaPageController.dispose();
     super.dispose();
   }
 
@@ -341,15 +348,25 @@ class _PostCardState extends State<PostCard> {
   /// Helper: chọn widget image phù hợp (có hỗ trợ AVIF)
   Widget _buildPostImage(String url) {
     final lower = url.toLowerCase();
+
     if (lower.endsWith('.avif')) {
       debugPrint('[PostCard] Using AvifImage for media: $url');
-      return AvifImage.network(url, fit: BoxFit.cover);
+      return AvifImage.network(
+        url,
+        fit: BoxFit.contain, // resize vừa khung, có thể crop nhẹ cho đẹp
+        alignment: Alignment.center,
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint('[PostCard] AVIF error: $error');
+          return const Center(child: Icon(Icons.broken_image));
+        },
+      );
     }
 
     debugPrint('[PostCard] Using Image.network for media: $url');
     return Image.network(
       url,
       fit: BoxFit.cover,
+      alignment: Alignment.center,
       errorBuilder: (_, __, ___) =>
           const Center(child: Icon(Icons.broken_image)),
       loadingBuilder: (context, child, loadingProgress) {
@@ -430,18 +447,19 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final p = widget.post;
-    final bool isOwner =
-        widget.currentUserId != null && widget.currentUserId == p.authorId;
+  /// Build toàn bộ phần media (nhiều ảnh / video) với khung cố định
+  Widget? _buildMediaSection(PostModel p) {
+    // Lọc media có URL hợp lệ
+    final validMedia = p.media
+        .where((m) => (m.url).toString().trim().isNotEmpty)
+        .toList();
 
     debugPrint(
       '[PostCard] ==== MEDIA DEBUG for postId=${p.id}, author=${p.authorName} ====',
     );
-    debugPrint('[PostCard] mediaCount = ${p.media.length}');
-    for (int i = 0; i < p.media.length; i++) {
-      final m = p.media[i];
+    debugPrint('[PostCard] mediaCount = ${validMedia.length}');
+    for (int i = 0; i < validMedia.length; i++) {
+      final m = validMedia[i];
       final fullUrl = buildFullUrl(m.url);
       debugPrint(
         '[PostCard] media[$i] type=${m.type} rawUrl="${m.url}" fullUrl="$fullUrl"',
@@ -449,32 +467,69 @@ class _PostCardState extends State<PostCard> {
     }
     debugPrint('[PostCard] ===========================================');
 
-    // Chọn media đầu tiên còn URL hợp lệ
-    MediaItem? firstMedia;
-    for (final m in p.media) {
-      if ((m.url).toString().trim().isEmpty) continue;
-      firstMedia ??= m;
-    }
+    if (validMedia.isEmpty) return null;
 
-    Widget? mediaSection;
-    if (firstMedia != null) {
-      final fullUrl = buildFullUrl(firstMedia!.url);
-      if (firstMedia!.type == 'video') {
-        mediaSection = ClipRRect(
+    return Column(
+      children: [
+        ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: _buildPostVideo(fullUrl),
-        );
-      } else {
-        mediaSection = ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: _buildPostImage(fullUrl),
+          child: SizedBox(
+            width: double.infinity,
+            height: 260, // 👈 khung cố định: ảnh/video resize vừa khung này
+            child: PageView.builder(
+              controller: _mediaPageController,
+              itemCount: validMedia.length,
+              onPageChanged: (index) {
+                setState(() => _currentMediaIndex = index);
+              },
+              itemBuilder: (context, index) {
+                final m = validMedia[index];
+                final fullUrl = buildFullUrl(m.url);
+
+                if (m.type == 'video') {
+                  return _buildPostVideo(fullUrl);
+                }
+
+                return _buildPostImage(fullUrl);
+              },
+            ),
           ),
-        );
-      }
-    }
+        ),
+        if (validMedia.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(validMedia.length, (i) {
+                final isActive = i == _currentMediaIndex;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: isActive ? 8 : 6,
+                  height: isActive ? 8 : 6,
+                  decoration: BoxDecoration(
+                    color: isActive ? Colors.blueAccent : Colors.grey,
+                    shape: BoxShape.circle,
+                  ),
+                );
+              }),
+            ),
+          ),
+      ],
+    );
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.post;
+    final bool isOwner =
+        widget.currentUserId != null && widget.currentUserId == p.authorId;
+
+    final mediaSection = _buildMediaSection(p);
+    final List<String> tags = (p.hashtags ?? const <String>[])
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       elevation: 1,
@@ -566,7 +621,25 @@ class _PostCardState extends State<PostCard> {
             // ===== CONTENT =====
             if ((p.content ?? '').isNotEmpty)
               Text(p.content!, style: const TextStyle(fontSize: 14)),
-
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: -4,
+                children: tags
+                    .map(
+                      (t) => Text(
+                        '#$t',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
             // ===== MEDIA (IMAGE / VIDEO) =====
             if (mediaSection != null) ...[
               const SizedBox(height: 8),
