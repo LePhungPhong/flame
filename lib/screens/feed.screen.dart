@@ -118,44 +118,108 @@ class _FeedScreenState extends State<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Bảng tin")),
-      body: RefreshIndicator(
-        onRefresh: _onRefresh,
-        child: _isLoading && _posts.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : _posts.isEmpty
-            ? ListView(
-                children: const [
-                  SizedBox(height: 200),
-                  Center(child: Text("Chưa có bài viết nào")),
-                ],
-              )
-            : ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                itemCount: _posts.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == _posts.length) {
-                    if (_isLoadingMore) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  }
+    final theme = Theme.of(context);
 
-                  final post = _posts[index];
-                  return PostCard(
-                    post: post,
-                    currentUserId: _currentUserId,
-                    onChanged: _onPostChanged,
-                  );
-                },
+    Widget content;
+
+    if (_isLoading && _posts.isEmpty) {
+      // Đang loading lần đầu
+      content = const Center(child: CircularProgressIndicator());
+    } else if (_posts.isEmpty) {
+      // Không có bài viết nào
+      content = ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 120),
+          Icon(
+            Icons.local_fire_department_rounded,
+            size: 48,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              "Chưa có bài viết nào",
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              "Hãy là người đầu tiên chia sẻ điều gì đó hôm nay ✨",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Có bài viết
+      content = ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        itemCount: _posts.length + 1,
+        itemBuilder: (context, index) {
+          if (index == _posts.length) {
+            if (_isLoadingMore) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              );
+            }
+            return const SizedBox.shrink();
+          }
+
+          final post = _posts[index];
+          return PostCard(
+            post: post,
+            currentUserId: _currentUserId,
+            onChanged: _onPostChanged,
+          );
+        },
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        elevation: 0,
+        centerTitle: false,
+        title: Row(
+          children: [
+            Icon(
+              Icons.local_fire_department_rounded,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              "Flame",
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: "Làm mới bảng tin",
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _onRefresh,
+          ),
+        ],
+      ),
+      body: Container(
+        color: theme.scaffoldBackgroundColor,
+        child: RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: content,
+          ),
+        ),
       ),
     );
   }

@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_avif/flutter_avif.dart';
 import 'package:video_player/video_player.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:flame/models/post.model.dart';
 import 'package:flame/services/postService/post.service.dart';
@@ -98,6 +101,7 @@ Widget buildAvatar({
       child: Image.network(
         url,
         fit: BoxFit.cover,
+        alignment: Alignment.center,
         errorBuilder: (context, error, stackTrace) {
           debugPrint('[Avatar] image error: $error');
           return CircleAvatar(
@@ -326,7 +330,7 @@ class _PostCardState extends State<PostCard> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         final height = MediaQuery.of(ctx).size.height * 0.75;
@@ -353,7 +357,7 @@ class _PostCardState extends State<PostCard> {
       debugPrint('[PostCard] Using AvifImage for media: $url');
       return AvifImage.network(
         url,
-        fit: BoxFit.contain, // resize vừa khung, có thể crop nhẹ cho đẹp
+        fit: BoxFit.contain,
         alignment: Alignment.center,
         errorBuilder: (context, error, stackTrace) {
           debugPrint('[PostCard] AVIF error: $error');
@@ -472,10 +476,10 @@ class _PostCardState extends State<PostCard> {
     return Column(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(16),
           child: SizedBox(
             width: double.infinity,
-            height: 260, // 👈 khung cố định: ảnh/video resize vừa khung này
+            height: 260, // khung cố định
             child: PageView.builder(
               controller: _mediaPageController,
               itemCount: validMedia.length,
@@ -521,6 +525,7 @@ class _PostCardState extends State<PostCard> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final p = widget.post;
     final bool isOwner =
         widget.currentUserId != null && widget.currentUserId == p.authorId;
@@ -530,241 +535,306 @@ class _PostCardState extends State<PostCard> {
         .map((t) => t.trim())
         .where((t) => t.isNotEmpty)
         .toList();
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ===== HEADER =====
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Avatar + tên bấm để vào trang profile người khác
-                Expanded(
-                  child: InkWell(
-                    onTap: _openAuthorProfile,
-                    borderRadius: BorderRadius.circular(999),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        buildAvatar(
-                          rawUrl: p.authorAvatar,
-                          displayName: p.authorName,
-                          radius: 20,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                p.authorName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
+      color: theme.cardColor,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.dividerColor.withOpacity(0.3)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: null, // để dành nếu sau này muốn mở chi tiết post
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ===== HEADER =====
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Toàn bộ avatar + tên + username/time được bọc Expanded
+                  Expanded(
+                    child: InkWell(
+                      onTap: _openAuthorProfile,
+                      borderRadius: BorderRadius.circular(999),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          buildAvatar(
+                            rawUrl: p.authorAvatar,
+                            displayName: p.authorName,
+                            radius: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          // Column này cũng Expanded để text không tràn
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p.authorName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _formatTime(p.createdAt),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${p.authorUsername} · ${_formatTime(p.createdAt)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 11,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Nút menu 3 chấm vẫn giữ nguyên
+                  if (isOwner)
+                    PopupMenuButton<String>(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onSelected: (value) async {
+                        if (value == 'edit') {
+                          _editPost();
+                        } else if (value == 'delete') {
+                          await _deletePost();
+                        }
+                      },
+                      itemBuilder: (ctx) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Chỉnh sửa')),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            'Xoá bài viết',
+                            style: TextStyle(color: Colors.red),
                           ),
                         ),
                       ],
                     ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // ===== TITLE =====
+              if ((p.title ?? '').isNotEmpty) ...[
+                Text(
+                  p.title!,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
                   ),
                 ),
+                const SizedBox(height: 4),
+              ],
 
-                if (isOwner)
-                  PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'edit') {
-                        _editPost();
-                      } else if (value == 'delete') {
-                        await _deletePost();
-                      }
-                    },
-                    itemBuilder: (ctx) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Chỉnh sửa')),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Xoá bài viết'),
-                      ),
+              // ===== CONTENT =====
+              if ((p.content ?? '').isNotEmpty)
+                Text(
+                  p.content!,
+                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 14),
+                ),
+
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: tags
+                      .map(
+                        (t) => Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            color: theme.colorScheme.primary.withOpacity(0.08),
+                          ),
+                          child: Text(
+                            '#$t',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+
+              // ===== MEDIA (IMAGE / VIDEO) =====
+              if (mediaSection != null) ...[
+                const SizedBox(height: 10),
+                mediaSection,
+              ],
+
+              const SizedBox(height: 8),
+
+              // ===== COUNTERS =====
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (likeCount > 0)
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.favorite,
+                          size: 14,
+                          color: Colors.red.withOpacity(0.8),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$likeCount lượt thích',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    const SizedBox.shrink(),
+                  Row(
+                    children: [
+                      if (commentCount > 0)
+                        Text(
+                          '$commentCount bình luận',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      if (commentCount > 0 && shareCount > 0)
+                        const SizedBox(width: 8),
+                      if (shareCount > 0)
+                        Text(
+                          '$shareCount lượt chia sẻ',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                     ],
                   ),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            // ===== TITLE =====
-            if ((p.title ?? '').isNotEmpty) ...[
-              Text(
-                p.title!,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
+                ],
               ),
-              const SizedBox(height: 4),
-            ],
 
-            // ===== CONTENT =====
-            if ((p.content ?? '').isNotEmpty)
-              Text(p.content!, style: const TextStyle(fontSize: 14)),
-            if (tags.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: -4,
-                children: tags
-                    .map(
-                      (t) => Text(
-                        '#$t',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-            // ===== MEDIA (IMAGE / VIDEO) =====
-            if (mediaSection != null) ...[
               const SizedBox(height: 8),
-              mediaSection,
-            ],
+              Divider(height: 1, color: theme.dividerColor.withOpacity(0.4)),
+              const SizedBox(height: 4),
 
-            const SizedBox(height: 8),
+              // ===== ACTION BAR =====
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  // LIKE
+                  _ActionButton(
+                    icon: isLiked ? Icons.favorite : Icons.favorite_border,
+                    label: 'Thích',
+                    color: isLiked ? Colors.red : Colors.grey.shade700,
+                    isBold: isLiked,
+                    onTap: _toggleLike,
+                  ),
 
-            // ===== COUNTERS =====
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (likeCount > 0)
-                  Text(
-                    '$likeCount lượt thích',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                  )
-                else
-                  const SizedBox.shrink(),
+                  // COMMENT
+                  _ActionButton(
+                    icon: Icons.mode_comment_outlined,
+                    label: 'Bình luận',
+                    color: Colors.grey.shade700,
+                    onTap: _openComments,
+                  ),
+
+                  // SHARE
+                  _ActionButton(
+                    icon: Icons.share_outlined,
+                    label: 'Chia sẻ',
+                    color: isShared ? Colors.blueAccent : Colors.grey.shade700,
+                    onTap: _sharePost,
+                  ),
+                ],
+              ),
+
+              if (loadingInteractions) ...[
+                const SizedBox(height: 6),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (commentCount > 0)
-                      Text(
-                        '$commentCount bình luận',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
-                        ),
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 1.8),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Đang tải tương tác...",
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
                       ),
-                    if (commentCount > 0 && shareCount > 0)
-                      const SizedBox(width: 8),
-                    if (shareCount > 0)
-                      Text(
-                        '$shareCount lượt chia sẻ',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
+                    ),
                   ],
                 ),
               ],
-            ),
-
-            const Divider(height: 16),
-
-            // ===== ACTION BAR =====
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                // LIKE
-                InkWell(
-                  onTap: _toggleLike,
-                  child: Row(
-                    children: [
-                      Icon(
-                        isLiked ? Icons.favorite : Icons.favorite_border,
-                        size: 20,
-                        color: isLiked ? Colors.red : Colors.grey.shade700,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Thích',
-                        style: TextStyle(
-                          color: isLiked ? Colors.red : Colors.grey.shade800,
-                          fontWeight: isLiked
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // COMMENT
-                InkWell(
-                  onTap: _openComments,
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.mode_comment_outlined,
-                        size: 20,
-                        color: Colors.grey.shade700,
-                      ),
-                      const SizedBox(width: 4),
-                      const Text('Bình luận'),
-                    ],
-                  ),
-                ),
-
-                // SHARE
-                InkWell(
-                  onTap: _sharePost,
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.share_outlined,
-                        size: 20,
-                        color: isShared
-                            ? Colors.blueAccent
-                            : Colors.grey.shade700,
-                      ),
-                      const SizedBox(width: 4),
-                      const Text('Chia sẻ'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            if (loadingInteractions) ...[
-              const SizedBox(height: 6),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 1.8),
-                  ),
-                  SizedBox(width: 6),
-                  Text("Đang tải tương tác...", style: TextStyle(fontSize: 11)),
-                ],
-              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Nút action Thích / Bình luận / Chia sẻ
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool isBold;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.isBold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: isBold ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
           ],
         ),
       ),
@@ -808,6 +878,47 @@ class _CommentSheetState extends State<_CommentSheet> {
     super.dispose();
   }
 
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // ============= KIỂM DUYỆT COMMENT =============
+  Future<bool> _checkCensorship(String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false; // không cho gửi comment rỗng
+
+    try {
+      final res = await http.post(
+        Uri.parse('https://flame.id.vn/censor/predict'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'text': trimmed}),
+      );
+
+      if (res.statusCode != 200) {
+        _showSnack('Không kiểm duyệt được nội dung. Vui lòng thử lại.');
+        return false;
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final label = (data['label'] ?? '').toString().toLowerCase();
+
+      if (label == 'toxic') {
+        final msg =
+            (data['message'] ??
+                    '🚨 Bình luận chứa ngôn từ tiêu cực, vui lòng chỉnh sửa trước khi gửi.')
+                .toString();
+        _showSnack(msg);
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      _showSnack('Lỗi kiểm duyệt nội dung: $e');
+      return false;
+    }
+  }
+
   Future<void> _loadComments() async {
     setState(() => _loading = true);
     try {
@@ -815,9 +926,7 @@ class _CommentSheetState extends State<_CommentSheet> {
       if (mounted) setState(() => _comments = list);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Lỗi tải comment: $e')));
+        _showSnack('Lỗi tải comment: $e');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -835,6 +944,10 @@ class _CommentSheetState extends State<_CommentSheet> {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
 
+    // gọi kiểm duyệt trước
+    final ok = await _checkCensorship(text);
+    if (!ok) return;
+
     setState(() => _sending = true);
     try {
       final cmt = await PostService.addComment(
@@ -849,9 +962,7 @@ class _CommentSheetState extends State<_CommentSheet> {
       setState(() => _comments.add(cmt));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Lỗi gửi comment: $e')));
+        _showSnack('Lỗi gửi comment: $e');
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -900,9 +1011,7 @@ class _CommentSheetState extends State<_CommentSheet> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Lỗi xoá comment: $e')));
+        _showSnack('Lỗi xoá comment: $e');
       }
     }
   }
@@ -1090,9 +1199,11 @@ class _CommentSheetState extends State<_CommentSheet> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Bình luận',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const Divider(),
             Expanded(
@@ -1109,6 +1220,7 @@ class _CommentSheetState extends State<_CommentSheet> {
             ),
             if (_replyTo != null)
               Container(
+                width: double.infinity,
                 color: Colors.grey.withOpacity(0.1),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -1116,7 +1228,12 @@ class _CommentSheetState extends State<_CommentSheet> {
                 ),
                 child: Row(
                   children: [
-                    Expanded(child: Text('Đang trả lời ${_replyTo!.username}')),
+                    Expanded(
+                      child: Text(
+                        'Đang trả lời ${_replyTo!.username}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
                     IconButton(
                       onPressed: () => setState(() => _replyTo = null),
                       icon: const Icon(Icons.close, size: 16),

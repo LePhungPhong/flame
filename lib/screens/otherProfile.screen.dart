@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flame/models/post.model.dart';
 import 'package:flame/services/searchService/search.service.dart';
-import 'package:flame/services/userSevice/friend.service.dart';
+import 'package:flame/services/userService/friend.service.dart';
 import 'package:flame/widgets/postCard.dart';
 
 const String kBaseUploadUrl = 'https://flame.id.vn';
@@ -59,13 +59,16 @@ class AvatarCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = radius * 2;
+
     Widget buildFallback() {
       return Container(
         width: size,
         height: size,
         decoration: const BoxDecoration(
           shape: BoxShape.circle,
-          color: Color(0xFF2563EB),
+          gradient: LinearGradient(
+            colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+          ),
         ),
         alignment: Alignment.center,
         child: Text(
@@ -250,7 +253,6 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
         onlyMe: false,
       );
 
-      // kiểm tra xem current user có nằm trong danh sách followers không
       bool isFollowing = false;
       if (_currentUserId != null) {
         for (final u in followers) {
@@ -285,7 +287,6 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
 
   /// Bật/tắt Follow với tài khoản này
   Future<void> _toggleFollow() async {
-    // nếu đang xử lý hoặc đang xem chính mình thì bỏ
     if (_isTogglingFollow ||
         _currentUserId == null ||
         _currentUserId == widget.userId) {
@@ -305,7 +306,6 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
         final willFollow = !_isFollowingUser;
         _isFollowingUser = willFollow;
 
-        // cập nhật số người theo dõi hiển thị
         if (willFollow) {
           _followersCount = (_followersCount + 1).clamp(0, 1 << 31);
         } else {
@@ -399,12 +399,13 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
   // ================= UI PARTS =================
 
   Widget _buildHeader() {
+    final theme = Theme.of(context);
+
     final displayName = widget.displayName.trim().isEmpty
         ? 'Người dùng'
         : widget.displayName.trim();
 
     String avatarPath = widget.avatarUrl ?? '';
-    // Nếu avatar rỗng, thử lấy từ bài post đầu tiên
     if (avatarPath.trim().isEmpty && _posts.isNotEmpty) {
       avatarPath = _posts.first.authorAvatar ?? '';
     }
@@ -414,47 +415,77 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
         .where((p) => p.authorId == widget.userId)
         .length;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.primary.withOpacity(0.08),
+            theme.colorScheme.primary.withOpacity(0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AvatarCircle(
             imageUrl: avatarUrl,
-            radius: 40,
+            radius: 36,
             fallbackText: displayName.isNotEmpty
                 ? displayName[0].toUpperCase()
                 : '?',
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 4), // chừa biên phải 1 chút
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildStatItem(
-                      label: 'Bài viết',
-                      value: postCount,
-                      onTap: () => setState(() => _viewMode = 0),
-                    ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
-                  Expanded(
-                    child: _buildStatItem(
-                      label: 'Người theo dõi',
-                      value: _followersCount,
-                      onTap: _openFollowersBottomSheet,
-                    ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${widget.username}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.grey.shade600,
                   ),
-                  Expanded(
-                    child: _buildStatItem(
-                      label: 'Đang theo dõi',
-                      value: _followingCount,
-                      onTap: _openFollowingBottomSheet,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatItem(
+                        label: 'Bài viết',
+                        value: postCount,
+                        onTap: () => setState(() => _viewMode = 0),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    Expanded(
+                      child: _buildStatItem(
+                        label: 'Người theo dõi',
+                        value: _followersCount,
+                        onTap: _openFollowersBottomSheet,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildStatItem(
+                        label: 'Đang theo dõi',
+                        value: _followingCount,
+                        onTap: _openFollowingBottomSheet,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -469,6 +500,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
   }) {
     final content = Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           value.toString(),
@@ -498,11 +530,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
   /// Nút Follow duy nhất (bỏ nút nhắn tin)
   Widget _buildActionButtons() {
     final bool isSelf = _currentUserId == widget.userId;
-
-    // Nếu xem trang cá nhân của chính mình thì không hiện nút follow
-    if (isSelf) {
-      return const SizedBox.shrink();
-    }
+    if (isSelf) return const SizedBox.shrink();
 
     final String buttonText = _isFollowingUser ? 'Bỏ theo dõi' : 'Theo dõi';
 
@@ -513,12 +541,11 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
         child: ElevatedButton(
           onPressed: _isTogglingFollow ? null : _toggleFollow,
           style: ElevatedButton.styleFrom(
-            backgroundColor: _isFollowingUser
-                ? Colors.grey.shade800
-                : Colors.black,
+            backgroundColor: _isFollowingUser ? Colors.red : Color(0xFF6D28D9),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(999),
             ),
+            padding: const EdgeInsets.symmetric(vertical: 10),
           ),
           child: _isTogglingFollow
               ? const SizedBox(
@@ -529,41 +556,41 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 )
-              : Text(buttonText),
+              : Text(buttonText, style: TextStyle(color: Colors.white)),
         ),
       ),
     );
   }
 
   Widget _buildViewToggle() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        IconButton(
-          icon: Icon(
-            Icons.grid_on,
-            size: 24,
-            color: _viewMode == 0 ? Colors.white : Colors.grey,
-          ),
-          style: IconButton.styleFrom(
-            backgroundColor: _viewMode == 0 ? Colors.black : Colors.transparent,
-            shape: const CircleBorder(),
-          ),
-          onPressed: () => setState(() => _viewMode = 0),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(999),
         ),
-        IconButton(
-          icon: Icon(
-            Icons.article_outlined,
-            size: 24,
-            color: _viewMode == 1 ? Colors.white : Colors.grey,
-          ),
-          style: IconButton.styleFrom(
-            backgroundColor: _viewMode == 1 ? Colors.black : Colors.transparent,
-            shape: const CircleBorder(),
-          ),
-          onPressed: () => setState(() => _viewMode = 1),
+        child: Row(
+          children: [
+            Expanded(
+              child: _SegmentButton(
+                icon: Icons.grid_on,
+                label: 'Lưới',
+                selected: _viewMode == 0,
+                onTap: () => setState(() => _viewMode = 0),
+              ),
+            ),
+            Expanded(
+              child: _SegmentButton(
+                icon: Icons.article_outlined,
+                label: 'Danh sách',
+                selected: _viewMode == 1,
+                onTap: () => setState(() => _viewMode = 1),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -776,14 +803,13 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.displayName.trim().isEmpty
+        ? 'Trang cá nhân'
+        : widget.displayName.trim();
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          widget.displayName.trim().isEmpty
-              ? 'Trang cá nhân'
-              : widget.displayName.trim(),
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         centerTitle: true,
       ),
       body: _isInitLoading
@@ -798,7 +824,6 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
                     _buildHeader(),
                     _buildActionButtons(),
                     const SizedBox(height: 8),
-                    const Divider(height: 1),
                     _buildViewToggle(),
                     const Divider(height: 1),
                     if (_loadingFollowCounts)
@@ -821,6 +846,58 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
                 ),
               ),
             ),
+    );
+  }
+}
+
+/// segmented button giống ProfileScreen
+class _SegmentButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SegmentButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? theme.colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: selected ? Colors.white : Colors.grey.shade700,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: selected ? Colors.white : Colors.grey.shade800,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

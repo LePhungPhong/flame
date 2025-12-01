@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_avif/flutter_avif.dart';
 import 'package:flutter/foundation.dart';
 
-import '../services/userSevice/friend.service.dart';
+import '../services/userService/friend.service.dart';
 
 const String kBaseUploadUrl = 'https://flame.id.vn';
 
@@ -92,13 +92,30 @@ class _FollowConnectionsScreenState extends State<FollowConnectionsScreen> {
       return Scaffold(
         appBar: AppBar(title: const Text('Kết nối bạn bè')),
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Lỗi tải dữ liệu:\n$_error', textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              ElevatedButton(onPressed: _reload, child: const Text('Thử lại')),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.sentiment_dissatisfied_outlined,
+                  size: 40,
+                  color: Colors.orangeAccent,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Lỗi tải dữ liệu:\n$_error',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.black54),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _reload,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Thử lại'),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -112,7 +129,7 @@ class _FollowConnectionsScreenState extends State<FollowConnectionsScreen> {
     final suggestions = result.suggestions;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Kết nối bạn bè')),
+      appBar: AppBar(title: const Text('Kết nối bạn bè'), centerTitle: true),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: SingleChildScrollView(
@@ -125,6 +142,7 @@ class _FollowConnectionsScreenState extends State<FollowConnectionsScreen> {
               const _SectionHeader(
                 title: 'Đang theo dõi',
                 subtitle: 'Những người bạn đang theo dõi.',
+                icon: Icons.visibility_outlined,
               ),
               const SizedBox(height: 12),
               _UserGrid(
@@ -148,6 +166,7 @@ class _FollowConnectionsScreenState extends State<FollowConnectionsScreen> {
               const _SectionHeader(
                 title: 'Bạn bè',
                 subtitle: 'Hai bạn đang theo dõi lẫn nhau.',
+                icon: Icons.people_alt_outlined,
               ),
               const SizedBox(height: 12),
               _UserGrid(
@@ -172,6 +191,7 @@ class _FollowConnectionsScreenState extends State<FollowConnectionsScreen> {
                 title: 'Người theo dõi',
                 subtitle:
                     'Những người đang theo dõi bạn. Theo dõi lại để kết nối.',
+                icon: Icons.person_search_outlined,
               ),
               const SizedBox(height: 12),
               _UserGrid(
@@ -195,6 +215,7 @@ class _FollowConnectionsScreenState extends State<FollowConnectionsScreen> {
               const _SectionHeader(
                 title: 'Gợi ý kết bạn',
                 subtitle: 'Những người bạn có thể quen.',
+                icon: Icons.lightbulb_outline,
               ),
               const SizedBox(height: 12),
               _UserGrid(
@@ -223,25 +244,49 @@ class _FollowConnectionsScreenState extends State<FollowConnectionsScreen> {
 class _SectionHeader extends StatelessWidget {
   final String title;
   final String subtitle;
+  final IconData icon;
 
-  const _SectionHeader({required this.title, required this.subtitle});
+  const _SectionHeader({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final textColor = theme.textTheme.bodyMedium?.color ?? Colors.black87;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+        Row(
+          children: [
+            Icon(icon, size: 18, color: Colors.grey.shade700),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+        Padding(
+          padding: const EdgeInsets.only(left: 24),
+          child: Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.grey.shade600,
+              fontSize: 11,
+            ),
+          ),
         ),
       ],
     );
@@ -276,7 +321,10 @@ class _UserGrid extends StatelessWidget {
     if (users.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text(emptyText, style: const TextStyle(color: Colors.grey)),
+        child: Text(
+          emptyText,
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
       );
     }
 
@@ -286,10 +334,14 @@ class _UserGrid extends StatelessWidget {
 
     final width = MediaQuery.of(context).size.width;
     int crossAxisCount = 2;
+    double aspectRatio = 0.75;
+
     if (width >= 900) {
-      crossAxisCount = 3;
+      crossAxisCount = 4;
+      aspectRatio = 0.8;
     } else if (width >= 600) {
       crossAxisCount = 3;
+      aspectRatio = 0.78;
     }
 
     return Column(
@@ -300,9 +352,9 @@ class _UserGrid extends StatelessWidget {
           itemCount: visibleUsers.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.75,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: aspectRatio,
           ),
           itemBuilder: (context, index) {
             final u = visibleUsers[index];
@@ -318,9 +370,10 @@ class _UserGrid extends StatelessWidget {
         if (visibleCount < total && onLoadMore != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: TextButton(
+            child: TextButton.icon(
               onPressed: onLoadMore,
-              child: const Text('Xem thêm'),
+              icon: const Icon(Icons.expand_more, size: 18),
+              label: const Text('Xem thêm'),
             ),
           ),
       ],
@@ -402,9 +455,16 @@ class _FollowCardState extends State<_FollowCard> {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade800),
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       child: Column(
@@ -413,7 +473,7 @@ class _FollowCardState extends State<_FollowCard> {
         children: [
           _FollowAvatarCircle(
             imageUrl: avatarUrl,
-            radius: 32,
+            radius: 30,
             fallbackText: displayName.isNotEmpty
                 ? displayName[0].toUpperCase()
                 : '?',
@@ -439,11 +499,12 @@ class _FollowCardState extends State<_FollowCard> {
               onPressed: _isLoading ? null : _toggleFollow,
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+                backgroundColor: Color(0xFF6D28D9),
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(999),
                 ),
+                side: BorderSide(color: Colors.grey.shade300),
               ),
               child: _isLoading
                   ? const SizedBox(
@@ -512,7 +573,7 @@ class _FollowAvatarCircle extends StatelessWidget {
         child: Text(
           fallbackText,
           style: const TextStyle(
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
             color: Colors.white,
           ),
